@@ -41,9 +41,14 @@ const binarySearchHelper = (arr, target, start, end) => {
  }
 };
 
-const arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-const target = 5;
-console.log(binarySearch(arr, target));
+process.stdin.on('data', data => {
+  var data1=data.toString().split("\\n");
+
+  // Convert string array to integer array
+  var arr = data1[0].toString().split(',').map(i => Number(i));
+  var target=Number(data1[1]);
+  console.log(binarySearch(arr,target));
+})
 `;
 
 const Landing = () => {
@@ -82,12 +87,23 @@ const Landing = () => {
   };
   const handleCompile = () => {
     setProcessing(true);
-    const formData = {
+    const formData1 = {
       language_id: language.id,
       // encode source code in base64
       source_code: btoa(code),
-      stdin: btoa(customInput),
+      stdin: btoa(`1,2,3,4,5
+      1`),
+      expected_output: btoa("0")
     };
+    const formData2 = {
+      language_id: language.id,
+      // encode source code in base64
+      source_code: btoa(code),
+      stdin: btoa(`1,2,3,4,5
+      3`),
+      expected_output: btoa("1")
+    };
+    const submissions = {"submissions":[formData1,formData2]};
     const options = {
       method: "POST",
       url: process.env.REACT_APP_RAPID_API_URL,
@@ -98,15 +114,15 @@ const Landing = () => {
         "X-RapidAPI-Host": process.env.REACT_APP_RAPID_API_HOST,
         "X-RapidAPI-Key": process.env.REACT_APP_RAPID_API_KEY,
       },
-      data: formData,
+      data: submissions,
     };
 
     axios
       .request(options)
       .then(function (response) {
         console.log("res.data", response.data);
-        const token = response.data.token;
-        checkStatus(token);
+        const tokens = response.data.map(obj => obj.token);
+        checkBatchStatus(tokens);
       })
       .catch((err) => {
         let error = err.response ? err.response.data : err;
@@ -124,6 +140,41 @@ const Landing = () => {
         setProcessing(false);
         console.log("catch block...", error);
       });
+  };
+
+  const checkBatchStatus = async (tokensParam) => {
+    const options = {
+      method: "GET",
+      url: process.env.REACT_APP_RAPID_API_URL ,
+      params: { base64_encoded: "true", fields: "*", tokens: tokensParam.toString() },
+      headers: {
+        "X-RapidAPI-Host": process.env.REACT_APP_RAPID_API_HOST,
+        "X-RapidAPI-Key": process.env.REACT_APP_RAPID_API_KEY,
+      },
+    };
+    try {
+      let response = await axios.request(options);
+      let statusIds = response.data.submissions.map(status => status.status_id);
+
+      // Processed - we have a result
+      if (statusIds.includes(1) || statusIds.includes(2)) {
+        // still processing
+        setTimeout(() => {
+          checkBatchStatus(tokensParam);
+        }, 2000);
+        return;
+      } else {
+        setProcessing(false);
+        setOutputDetails(response.data.submissions);
+        showSuccessToast(`Compiled Successfully!`);
+        console.log("response.data", response.data);
+        return;
+      }
+    } catch (err) {
+      console.log("err", err);
+      setProcessing(false);
+      showErrorToast();
+    }
   };
 
   const checkStatus = async (token) => {
@@ -283,7 +334,6 @@ const Landing = () => {
           {outputDetails && <OutputDetails outputDetails={outputDetails} />}
         </div>
       </div>
-      <Footer />
     </>
   );
 };
